@@ -163,12 +163,12 @@ class FwdLossBwdTrainer():
                 self.args.train_batch_size,
                 self.args.max_seq_length,
                 1024,
-                dtype=torch.float16,
+                dtype=torch.float16 if self.args.fp16 else torch.float32,
                 device=self.args.device),
             torch.ones(
                 self.args.train_batch_size,
                 1024,
-                dtype=torch.float16,
+                dtype=torch.float16 if self.args.fp16 else torch.float32,
                 device=self.args.device),
             torch.ones(
                 self.args.train_batch_size,
@@ -185,10 +185,10 @@ class FwdLossBwdTrainer():
                 eval_batch,
                 self.args.max_seq_length,
                 1024,
-                dtype=torch.float16,
+                dtype=torch.float16 if self.args.fp16 else torch.float32,
                 device=self.args.device),
             torch.ones(
-                eval_batch, 1024, dtype=torch.float16, device=self.args.device),
+                eval_batch, 1024, dtype=torch.float16 if self.args.fp16 else torch.float32, device=self.args.device),
             torch.ones(
                 eval_batch,
                 self.args.max_seq_length,

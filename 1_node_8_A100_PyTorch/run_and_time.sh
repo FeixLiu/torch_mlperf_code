@@ -16,6 +16,8 @@
 
 set -e
 
+source ./config_DGXA100_1x8x56x1.sh
+
 [ "${DEBUG}" = "1" ] && set -x
 
 # Vars without defaults
@@ -70,7 +72,7 @@ PHASE1="\
     --num_steps_per_checkpoint=2500 \
     --max_seq_length=128 \
     --max_predictions_per_seq=20 \
-    --input_dir=/workspace/data \
+    --input_dir=/workspace/bert_data/hdf5/training-4320/hdf5_4320_shards_uncompressed \
     "
 PHASE2="\
     --train_batch_size=${BATCHSIZE} \
@@ -84,8 +86,8 @@ PHASE2="\
     --phase2 \
     --max_seq_length=512 \
     --max_predictions_per_seq=76 \
-    --input_dir=/workspace/data_phase2 \
-    --init_checkpoint=/workspace/phase1/model.ckpt-28252.pt \
+    --input_dir=/workspace/bert_data/hdf5/training-4320/hdf5_4320_shards_uncompressed \
+    --init_checkpoint=/workspace/bert_data/phase1/model.ckpt-28252.pt \
     "
 PHASES=( "$PHASE1" "$PHASE2" )
 
@@ -126,14 +128,14 @@ BERT_CMD="\
     --weight_decay_rate=${WEIGHT_DECAY_RATE} \
     --max_samples_termination=${MAX_SAMPLES_TERMINATION} \
     --eval_iter_start_samples=${EVAL_ITER_START_SAMPLES} --eval_iter_samples=${EVAL_ITER_SAMPLES} \
-    --eval_batch_size=16 --eval_dir=/workspace/evaldata --num_eval_examples 10000 \
+    --eval_batch_size=16 --eval_dir=/workspace/bert_data/hdf5/eval --num_eval_examples 10000 \
     --cache_eval_data \
     --output_dir=/results \
     --fp16  \
     --distributed_lamb --dwu-num-rs-pg=1 --dwu-num-ar-pg=1 --dwu-num-ag-pg=1 --dwu-num-blocks=1 \
     --gradient_accumulation_steps=${GRADIENT_STEPS} \
-    --log_freq=0 \
-    --bert_config_path=/workspace/phase1/bert_config.json "
+    --log_freq=50 \
+    --bert_config_path=/workspace/bert_data/phase1/bert_config.json "
 
 if [ -n "${SLURM_LOCALID-}" ]; then
   BERT_CMD="${BERT_CMD} --local_rank=${SLURM_LOCALID} "

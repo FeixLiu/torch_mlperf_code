@@ -1007,44 +1007,6 @@ def prepare_model_and_optimizer(args, device, stream):
         for n in l2:
             p_names.append(n)
 
-        p_offset = 0
-        prev = None
-        param_storage = optimizer._new_params.storage()
-        buffer_w_offsets = []
-        buffer_b_offsets = []
-        for i, p in enumerate(optimizer._model_params):
-            p_param_size = p.numel()
-            if 'self.Wq' in p_names[i]:
-                buffer_w_offsets.append(p_offset)
-            if 'self.Bq' in p_names[i]:
-                buffer_b_offsets.append(p_offset)
-            #if 'self.Wq' in p_names[i] or 'self.Wk' in p_names[i] or 'self.Wv' in p_names[i] or 'self.Bq' in p_names[i] or 'self.Bk' in p_names[i] or 'self.Bv' in p_names[i]  :
-            #    continue
-            with torch.no_grad():
-                p.set_(
-                    source=param_storage,
-                    storage_offset=p_offset,
-                    size=p.size())
-            p_offset += p_param_size
-            if prev is not None and (prev.data_ptr() + prev.numel() *
-                                     prev.element_size() != p.data_ptr()):
-                p_offset = ((p_offset + 63) // 64) * 64
-            prev = p
-        for i in range(24):
-            size_tmp = model.bert_model_segment.bert.encoder.layer[
-                i].attention.self.Wqkv.size()
-            model.bert_model_segment.bert.encoder.layer[
-                i].attention.self.Wqkv.set_(
-                    source=param_storage,
-                    storage_offset=buffer_w_offsets[i],
-                    size=size_tmp)
-            size_tmp = model.bert_model_segment.bert.encoder.layer[
-                i].attention.self.Bqkv.size()
-            model.bert_model_segment.bert.encoder.layer[
-                i].attention.self.Bqkv.set_(
-                    source=param_storage,
-                    storage_offset=buffer_b_offsets[i],
-                    size=size_tmp)
         model.load_state_dict(checkpoint_remapped, strict=True)
 
 #        loss, _, _ = model(*batch_gpu_placeholder)
@@ -1244,7 +1206,7 @@ def exchange_padding_fast(device, input_ids, segment_ids, input_mask,
                       next_sentence_labels):
 
         packet = torch.zeros(
-            [get_local_packet_size()], device=device, dtype=torch.int16)
+            [get_local_packet_size()], device=device, dtype=torch.int16 if args.fp16 else torch.int32)
 
         curr_pos = 0
 
@@ -1303,12 +1265,12 @@ def exchange_padding_fast(device, input_ids, segment_ids, input_mask,
                             masked_lm_labels, next_sentence_labels)
 
     tensors_ = torch.zeros(
-        [ngpus, get_local_packet_size()], device=device, dtype=torch.float16)
+        [ngpus, get_local_packet_size()], device=device, dtype=torch.float16 if args.fp16 else torch.float32)
     tensors_ = list(torch.split(tensors_, 1))
 
-    torch.distributed.all_gather(tensors_, tensors.view(torch.float16))
+    torch.distributed.all_gather(tensors_, tensors.view(torch.float16 if args.fp16 else torch.float32))
 
-    tensors_ = torch.stack(tensors_).view(torch.int16).long()
+    tensors_ = torch.stack(tensors_).view(torch.int16 if args.fp16 else torch.int32).long()
     input_ids_, segment_ids_, input_mask_, masked_lm_labels_, next_sentence_labels_ = decode_packet(
         tensors_)
 
@@ -1912,7 +1874,7 @@ def main():
 
                     if args.exchange_padding == True:
                         batch = [
-                            t.to(device, non_blocking=True, dtype=torch.int16)
+                            t.to(device, non_blocking=True, dtype=torch.int16 if args.fp16 else torch.int32)
                             for t in batch
                         ]
                         batch = exchange_padding_fast(device, *batch,
